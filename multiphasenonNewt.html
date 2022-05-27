@@ -179,8 +179,8 @@
           rhoSu * g * Math.sin(theta);
 
         //Frequency
-        let lu = (rhoL * Ub * Ub) / (dpdx + rhoSu * g * Math.sin(theta)) / 4.3;
-        let fr = Us / lu;
+        //let lu = (rhoL * Ub * Ub) / (dpdx + rhoSu * g * Math.sin(theta)) / 4.3;
+        //let fr = Us / lu;
         //return {x:nAL/A,dpdx,ReL,ReG,ReI,EQ,Ub,Uf,ReL,ReG,ReI,ReS,fr};
         return { x: nAL / A, dpdx, EQ, lf, AlphaS, Ub };
       }
@@ -250,7 +250,8 @@
         var Usl = Number(document.getElementById("Usl").value);
         var diameter = Number(document.getElementById("diameter").value);
         var cd = Number(document.getElementById("cd").value);
-        var theta = Number(document.getElementById("theta").value);
+        var theta =
+          (Number(document.getElementById("theta").value) * Math.PI) / 180.0;
         console.log(Usg, Usl, diameter, theta, rhog, rhol, mug, plk, pln);
         let { dpdx, Alphaf, AlphaS, lf, Ub } = Solve(
           Usg,
@@ -269,7 +270,7 @@
         let rhoSU = (1.0 - aSU) * rhog + aSU * rhol;
         let lu =
           (cd * rhol * Ub * Ub) /
-          Math.abs(dpdx + rhoSU * 9.81 * Math.sin((theta / 180.0) * Math.PI));
+          Math.abs(dpdx + rhoSU * 9.81 * Math.sin(theta));
         console.log("lu=", lu, Ub);
         document.getElementById("dpdx").value = dpdx.toFixed(3);
         document.getElementById("lu").value = lu.toFixed(3);
