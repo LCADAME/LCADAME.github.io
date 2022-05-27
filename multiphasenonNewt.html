@@ -278,6 +278,7 @@
         document.getElementById("frequency").value = ((Usg + Usl) / lu).toFixed(
           3
         );
+        document.getElementById("Ub").value = Ub.toFixed(3);
       }
     </script>
     <style>
@@ -516,6 +517,18 @@
                           class="form-control myEdit"
                           name="lf"
                           id="lf"
+                          disabled
+                        />
+                      </div>
+                      <div class="form-group mt-3">
+                        <label for="Ub" class="myLabel"
+                          >Bubble Velocity [Ub]:</label
+                        >
+                        <input
+                          type="text"
+                          class="form-control myEdit"
+                          name="Ub"
+                          id="Ub"
                           disabled
                         />
                       </div>
