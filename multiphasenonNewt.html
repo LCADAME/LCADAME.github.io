@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>L'CADAME - Non-Newtonian Two Phase Solver</title>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <meta
+      content="LCADAME, high performance computing, HPC, multiphase, two phase, slug, frequency, power, law, bingham, herschel, bulkley, nonNewtonian, Newtonian, mechanistic, orell, taitel, duckler"
+      name="keywords"
+    />
+    <meta
+      content="Laboratório de Computação de Alto Desempenho e Aprendizado de Máquina em Engenharia (L'CADAME)"
+      name="description"
+    />
+
+    <!-- Favicons -->
+    <link
+      rel="apple-touch-icon"
+      sizes="180x180"
+      href="img/fav/apple-touch-icon.png"
+    />
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="32x32"
+      href="img/fav/favicon-32x32.png"
+    />
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="16x16"
+      href="img/fav/favicon-16x16.png"
+    />
+    <link rel="manifest" href="img/fav/site.webmanifest" />
+
+    <!-- Google Fonts -->
+    <link
+      href="https://fonts.googleapis.com/css?family=Open+Sans:300,300i,400,400i,500,600,700,700i|Montserrat:300,400,500,600,700"
+      rel="stylesheet"
+    />
+
+    <!-- Bootstrap CSS File -->
+    <link href="lib/bootstrap/css/bootstrap.min.css" rel="stylesheet" />
+
+    <!-- Libraries CSS Files -->
+    <link href="lib/font-awesome/css/font-awesome.min.css" rel="stylesheet" />
+    <link href="lib/animate/animate.min.css" rel="stylesheet" />
+    <link href="lib/ionicons/css/ionicons.min.css" rel="stylesheet" />
+    <link href="lib/owlcarousel/assets/owl.carousel.min.css" rel="stylesheet" />
+    <link href="lib/lightbox/css/lightbox.min.css" rel="stylesheet" />
+
+    <!-- Main Stylesheet File -->
+    <link href="css/style.css" rel="stylesheet" />
+
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script
+      id="MathJax-script"
+      async
+      src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"
+    ></script>
+
+    <!-- =======================================================
+    Theme Name: Rapid
+    Theme URL: https://bootstrapmade.com/rapid-multipurpose-bootstrap-business-template/
+    Author: BootstrapMade.com
+    License: https://bootstrapmade.com/license/
+  ======================================================= -->
+    <script>
+      function gammaFunc(ag) {
+        return (
+          2.0 *
+          (Math.PI * (1.0 - ag) +
+            Math.pow(1.5 * Math.PI, 1.0 / 3.0) *
+              (2.0 * ag -
+                1.0 +
+                Math.pow(1.0 - ag, 1.0 / 3.0) -
+                Math.pow(ag, 1.0 / 3.0)))
+        );
+      }
+      function frictionL(Re, n) {
+        let ReMR =
+          Re / Math.pow(8.0, n - 1.0) / Math.pow((1.0 + 3 * n) / 4.0 / n, n);
+        let Ret = 3250.0 - 1150.0 * n;
+        if (ReMR < Ret) {
+          return 16.0 / ReMR;
+        } else {
+          return 0.079 * Math.pow(Re, -1.0 / 2.0 / (n + 1.0));
+        }
+      }
+      function frictionG(Re) {
+        if (Re < 2100.0) {
+          return 16.0 / Re;
+        } else {
+          return 0.079 * Math.pow(Re, -0.25);
+        }
+      }
+      function frictionI(Re) {
+        if (Re < 2100.0) {
+          return 16.0 / Re;
+        } else {
+          return 0.079 * Math.pow(Re, -0.25);
+        }
+      }
+
+      function mainFunc(x, Usg, Usl, D, theta, rhoG, rhoL, muG, muL, n, sigL) {
+        let g = 10.0;
+        let aux1 = Math.pow(g * D, 0.5);
+        let Us = Usg + Usl;
+        let Ut = 1.2 * Us + 0.54 * aux1;
+        let F0 = 2.6 * (1.9 - 2.0 * Math.pow(0.025 / D, 2.0));
+        let B0 = (g * (rhoL - rhoG) * D * D) / sigL;
+        let AlphaS =
+          1.0 - (Us / aux1 - F0) / (Us / aux1 + 2400.0 * Math.pow(B0, -3 / 4));
+        //let AlphaS = 1.0/(1.0+Math.pow(Us/8.66,1.39));
+
+        if (AlphaS > 1) {
+          AlphaS = 0.999;
+        }
+
+        let Uf = (AlphaS * (Us - Ut)) / x + Ut;
+        if (Uf < 0.0) {
+          return { x: 0, dpdx: 0, EQ: 10e10 };
+          //return {x:0,dpdx:0,ReL:0,ReG:0,ReI:0,EQ:10e10,Ub:0,Uf:0,ReL:0,ReG:0,ReI:0,ReS:0,fr:0};
+        }
+
+        //-- lenght of film (10)
+        let lf = (Usl - AlphaS * Us) / (x * Uf - AlphaS * Us);
+
+        //-- Bubble velocity (11)
+        let Ub = (Usg - (1.0 - lf) * (1.0 - AlphaS) * Us) / (lf * (1.0 - x));
+
+        let A = (Math.PI / 4.0) * D * D;
+        let AL = A * x;
+        let AG = A * (1.0 - x);
+        let gamma = gammaFunc(1.0 - x);
+        let SL = (gamma * D) / 2.0;
+        let SG = Math.PI * D - SL;
+        let Si = Math.sin(gamma / 2.0) * D;
+
+        let DG = (4.0 * AG) / (SG + Si);
+        let DL = (4.0 * AL) / SL;
+
+        let ReG = (rhoG * DG * Ub) / muG;
+        let ReL = (rhoL * Math.pow(DL, n) * Math.pow(Uf, 2.0 - n)) / muL;
+        let ReI = (rhoG * DG * Math.abs(Ub - Uf)) / muG;
+
+        let fL = frictionL(Math.abs(ReL), n);
+        let fG = frictionG(Math.abs(ReG));
+        let fi = frictionI(Math.abs(ReI));
+
+        let tauL = 0.5 * rhoL * Uf * Uf * fL;
+        let tauG = 0.5 * rhoG * Ub * Ub * fG;
+        let taui = 0.5 * rhoG * (Ub - Uf) * Math.abs(Ub - Uf) * fi;
+
+        //Eq 13
+        let EQ =
+          (tauG * SG) / AG -
+          (tauL * SL) / AL +
+          taui * Si * (1.0 / AL + 1.0 / AG) -
+          (rhoL - rhoG) * g * Math.sin(theta);
+        let nAL =
+          (-tauL * SL + taui * Si) /
+          ((rhoL - rhoG) * g * Math.sin(theta) -
+            (tauG * SG) / AG -
+            (taui * Si) / AG);
+
+        //pressure drop
+        let rhoS = rhoL * AlphaS + rhoG * (1.0 - AlphaS);
+        let ReS = (rhoS * Math.pow(D, n) * Math.pow(Us, 2 - n)) / muL;
+        let fS = frictionL(ReS, n);
+
+        let Hsu = AlphaS * (1.0 - lf) + x * lf;
+        let rhoSu = Hsu * rhoL + (1.0 - Hsu) * rhoG;
+
+        //EQ 15
+        let dpdx =
+          ((2.0 * fS * rhoS * Us * Us) / D) * (1.0 - lf) +
+          ((tauL * SL) / nAL - (taui * Si) / nAL) * lf +
+          rhoSu * g * Math.sin(theta);
+
+        //Frequency
+        let lu = (rhoL * Ub * Ub) / (dpdx + rhoSu * g * Math.sin(theta)) / 4.3;
+        let fr = Us / lu;
+        //return {x:nAL/A,dpdx,ReL,ReG,ReI,EQ,Ub,Uf,ReL,ReG,ReI,ReS,fr};
+        return { x: nAL / A, dpdx, EQ, lf, AlphaS, Ub };
+      }
+
+      function Solve(Usg, Usl, D, theta, rhoG, rhoL, muG, muL, n, sigL) {
+        let x0 = 0.001;
+        let x1 = 0.999;
+        let minEQ = 1.0e9;
+        let Xmin = 0;
+        for (let j = 0; j < 3; j++) {
+          if (j > 0) {
+            x0 = 0.9 * Xmin;
+            x1 = 1.1 * Xmin;
+          }
+
+          let Nt = 100;
+          let i = 0;
+          while (i < Nt) {
+            let x = ((x1 - x0) / Nt) * i + x0;
+            let { nx, dpdx, EQ } = mainFunc(
+              x,
+              Usg,
+              Usl,
+              D,
+              theta,
+              rhoG,
+              rhoL,
+              muG,
+              muL,
+              n,
+              sigL
+            );
+            if (Math.abs(EQ) < minEQ) {
+              minEQ = Math.abs(EQ);
+              Xmin = x;
+            }
+            i = i + 1;
+          }
+        }
+        let { nx, dpdx, EQ, lf, AlphaS, Ub } = mainFunc(
+          Xmin,
+          Usg,
+          Usl,
+          D,
+          theta,
+          rhoG,
+          rhoL,
+          muG,
+          muL,
+          n,
+          sigL
+        );
+        console.log("dpsx=", dpdx, "Alphaf=", Xmin);
+        return { dpdx, Alphaf: Xmin, AlphaS, lf, Ub };
+        //print("dpsx=",dpdx,"Ub=",Ub,"Uf=",Uf,"Ref=",ReL,"Reg=",ReG,"ReS=",ReS,"Alphaf=",Xmin)
+        //print("dpsx=",dpdx,"fs=",fr,"EQ=",EQ)
+      }
+
+      function Execute() {
+        var rhog = Number(document.getElementById("rhog").value);
+        var mug = Number(document.getElementById("mug").value);
+        var rhol = Number(document.getElementById("rhol").value);
+        var pln = Number(document.getElementById("pln").value);
+        var plk = Number(document.getElementById("plk").value);
+
+        var Usg = Number(document.getElementById("Usg").value);
+        var Usl = Number(document.getElementById("Usl").value);
+        var diameter = Number(document.getElementById("diameter").value);
+        var cd = Number(document.getElementById("cd").value);
+        var theta = Number(document.getElementById("theta").value);
+        console.log(Usg, Usl, diameter, theta, rhog, rhol, mug, plk, pln);
+        let { dpdx, Alphaf, AlphaS, lf, Ub } = Solve(
+          Usg,
+          Usl,
+          diameter,
+          theta,
+          rhog,
+          rhol,
+          mug,
+          plk,
+          pln,
+          0.0157
+        );
+
+        let aSU = AlphaS * (1.0 - lf) + Alphaf * lf;
+        let rhoSU = (1.0 - aSU) * rhog + aSU * rhol;
+        let lu =
+          (cd * rhol * Ub * Ub) /
+          Math.abs(dpdx + rhoSU * 9.81 * Math.sin((theta / 180.0) * Math.PI));
+        console.log("lu=", lu, Ub);
+        document.getElementById("dpdx").value = dpdx.toFixed(3);
+        document.getElementById("lu").value = lu.toFixed(3);
+        document.getElementById("lf").value = (lf * lu).toFixed(3);
+        document.getElementById("frequency").value = ((Usg + Usl) / lu).toFixed(
+          3
+        );
+      }
+    </script>
+    <style>
+      .myEdit {
+        display: inline;
+        width: 100px;
+      }
+      .myLabel {
+        width: 200px;
+      }
+    </style>
+  </head>
+
+  <body>
+    <!--==========================
+  Header
+  ============================-->
+    <header id="header">
+      <div class="container">
+        <div class="logo float-left">
+          <!-- Uncomment below if you prefer to use an image logo -->
+          <a href="#header" class="scrollto"
+            ><img src="img/header.png" alt="" class="img-fluid"
+          /></a>
+        </div>
+
+        <nav class="main-nav float-right d-none d-lg-block">
+          <ul>
+            <li><a href="index.html#about">About Us</a></li>
+            <li class="active"><a href="index.html#projects">Projects</a></li>
+            <li><a href="index.html#team">Team</a></li>
+            <li><a href="#faq">Publications</a></li>
+            <li><a href="index.html#footer">Positions</a></li>
+            <li><a href="#footer">Contact Us</a></li>
+          </ul>
+        </nav>
+        <!-- .main-nav -->
+      </div>
+    </header>
+    <!-- #header -->
+
+    <main id="main">
+      <section id="faq">
+        <div
+          class="container"
+          style="
+            background: #d1e0e0;
+            margin-top: 30px;
+            padding: 10px 10px 10px 10px;
+          "
+        >
+          <header class="section-header">
+            <h3>Two-phase non-Newtonian Mechanistic Slug Solver</h3>
+            <p>
+              This solver is an extension of the mechanistic model of Orell
+              (2005), to consider the non-Newtonian, power-law type liquid
+              phase. (more info)
+            </p>
+          </header>
+          <div class="about-content">
+            <form class="php-email-form" onsubmit="return false;">
+              <div class="row feature-item">
+                <div class="col-lg-4">
+                  <div class="form-group">
+                    <label for="diameter" class="myLabel"
+                      >Pipe Diameter [m]:</label
+                    >
+                    <input
+                      type="text"
+                      name="diameter"
+                      class="form-control myEdit"
+                      id="diameter"
+                      value="0.15"
+                      required
+                    />
+                  </div>
+                  <div class="form-group mt-3">
+                    <label for="theta" class="myLabel">Pipe Inclination:</label>
+                    <input
+                      type="text"
+                      class="form-control myEdit"
+                      name="theta"
+                      id="theta"
+                      value="0.0"
+                      required
+                    />
+                  </div>
+                  <div class="form-group mt-3">
+                    <label for="rhog" class="myLabel">Gas Density:</label>
+                    <input
+                      type="text"
+                      class="form-control myEdit"
+                      name="rhog"
+                      id="rhog"
+                      value="1.0"
+                      required
+                    />
+                  </div>
+                  <div class="form-group mt-3">
+                    <label for="mug" class="myLabel">Gas Viscosity:</label>
+                    <input
+                      type="text"
+                      class="form-control myEdit"
+                      name="mug"
+                      id="mug"
+                      value="1.5e-5"
+                      required
+                    />
+                  </div>
+                  <div class="form-group mt-3">
+                    <label for="Usg" class="myLabel"
+                      >Gas superficial Velocity:</label
+                    >
+                    <input
+                      type="text"
+                      class="form-control myEdit"
+                      name="Usg"
+                      id="Usg"
+                      value="1.55"
+                      required
+                    />
+                  </div>
+
+                  <div class="form-group mt-3">
+                    <label for="rhol" class="myLabel">Liquid Density:</label>
+                    <input
+                      type="text"
+                      class="form-control myEdit"
+                      name="rhol"
+                      id="rhol"
+                      value="860.0"
+                      required
+                    />
+                  </div>
+                  <div class="form-group mt-3">
+                    <label for="pln" class="myLabel"
+                      >Liquid Power-law (n):</label
+                    >
+                    <input
+                      type="text"
+                      class="form-control myEdit"
+                      name="pln"
+                      id="pln"
+                      value="1.0"
+                      required
+                    />
+                  </div>
+                  <div class="form-group mt-3">
+                    <label for="plk" class="myLabel"
+                      >Liquid Power-law (K):</label
+                    >
+                    <input
+                      type="text"
+                      class="form-control myEdit"
+                      name="plk"
+                      id="plk"
+                      value="0.015"
+                      required
+                    />
+                  </div>
+                  <div class="form-group mt-3">
+                    <label for="Usl" class="myLabel"
+                      >Liquid superficial Velocity:</label
+                    >
+                    <input
+                      type="text"
+                      class="form-control myEdit"
+                      name="Usl"
+                      id="Usl"
+                      value="0.39"
+                      required
+                    />
+                  </div>
+
+                  <div class="form-group mt-3">
+                    <label for="cd" class="myLabel">Drag Coefficient:</label>
+                    <input
+                      type="text"
+                      class="form-control myEdit"
+                      name="cd"
+                      id="cd"
+                      value="0.15"
+                      required
+                    />
+                  </div>
+                </div>
+                <div class="col-lg-8">
+                  <img
+                    src="img/projects/slug/slug.png"
+                    alt="Slug Unit Specifications"
+                  />
+                  <div class="row feature-item">
+                    <div class="col-lg-6">
+                      <div class="form-group mt-3">
+                        <label for="dpdx" class="myLabel"
+                          >Pressure drop [Pa/m]:</label
+                        >
+                        <input
+                          type="text"
+                          class="form-control myEdit"
+                          name="dpdx"
+                          id="dpdx"
+                          disabled
+                        />
+                      </div>
+                      <div class="form-group mt-3">
+                        <label for="frequency" class="myLabel"
+                          >Frequency [1/s]:</label
+                        >
+                        <input
+                          type="text"
+                          class="form-control myEdit"
+                          name="frequency"
+                          id="frequency"
+                          disabled
+                        />
+                      </div>
+                    </div>
+                    <div class="col-lg-6">
+                      <div class="form-group mt-3">
+                        <label for="lu" class="myLabel"
+                          >Slug Unit Length [m]:</label
+                        >
+                        <input
+                          type="text"
+                          class="form-control myEdit"
+                          name="lu"
+                          id="lu"
+                          disabled
+                        />
+                      </div>
+                      <div class="form-group mt-3">
+                        <label for="lf" class="myLabel">Film Length [m]:</label>
+                        <input
+                          type="text"
+                          class="form-control myEdit"
+                          name="lf"
+                          id="lf"
+                          disabled
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="text-center">
+                <button type="submit" title="Simulate" onclick="Execute()">
+                  Calculate
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </section>
+      <!-- #faq -->
+
+      <div class="container">
+        <div class="row">
+          <div class="col">
+            <div class="about-content">
+              <h3>Power-law type non-Newtonian liquid phase</h3>
+              <p>
+                This solver assumes that the liquid phase behaves as a power-law
+                fluid where $$\tau = K \dot{\gamma}^n.$$ To simulate regular
+                Newtonian fluids, one can set \(n=1\) and then \(K\) will be the
+                viscosity of the liquid phase.
+              </p>
+              <p>
+                Drag coefficient is the parameter that our model uses to
+                calculate the frequency of the slugs. Values between 0.15 and
+                0.2 works good for many cases. In practice this parameter
+                depends on the rhoelogy of the liquid phase and the pipe
+                diameter.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!--==========================
+    Footer
+  ============================-->
+    <footer id="footer" class="section-bg">
+      <div class="footer-top">
+        <div class="container">
+          <div class="row">
+            <div class="col-sm-8"></div>
+
+            <div class="col-sm-4">
+              <div class="footer-links">
+                <h4>Contact Us</h4>
+                <p>
+                  Block H <br />
+                  Center of Technolog (CT) <br />
+                  Federal University of Rio de Janeiro,<br />
+                  Rio de Janeiro, Brazil <br />
+                  <strong>Email:</strong> cadamelab@gmail.com<br />
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="container">
+        <div class="credits">
+          Designed by <a href="https://bootstrapmade.com/">BootstrapMade</a>
+        </div>
+      </div>
+    </footer>
+    <!-- #footer -->
+
+    <a href="#" class="back-to-top"><i class="fa fa-chevron-up"></i></a>
+    <!-- Uncomment below i you want to use a preloader -->
+    <!-- <div id="preloader"></div> -->
+
+    <!-- JavaScript Libraries -->
+    <script src="lib/jquery/jquery.min.js"></script>
+    <script src="lib/jquery/jquery-migrate.min.js"></script>
+    <script src="lib/bootstrap/js/bootstrap.bundle.min.js"></script>
+    <script src="lib/easing/easing.min.js"></script>
+    <script src="lib/mobile-nav/mobile-nav.js"></script>
+    <script src="lib/wow/wow.min.js"></script>
+    <script src="lib/waypoints/waypoints.min.js"></script>
+    <script src="lib/counterup/counterup.min.js"></script>
+    <script src="lib/owlcarousel/owl.carousel.min.js"></script>
+    <script src="lib/isotope/isotope.pkgd.min.js"></script>
+    <script src="lib/lightbox/js/lightbox.min.js"></script>
+    <!-- Contact Form JavaScript File -->
+    <script src="contactform/contactform.js"></script>
+
+    <!-- Template Main Javascript File -->
+    <script src="js/main.js"></script>
+  </body>
+</html>
